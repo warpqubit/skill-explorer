@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skills Explorer — GitHub API v3</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="header-tag">// GitHub API v3 · Skills Explorer</div>
+    <h1>Skills Explorer</h1>
+    <p>Buscá repositorios con skills de Claude usando la API oficial de GitHub. Sin scraping, sin bloqueos — hasta 5.000 req/hora con token gratuito.</p>
+    <div class="rate-monitor" id="rateMonitor" style="display:none">
+      <div class="rate-item">
+        <div class="rate-dot" id="rateDot"></div>
+        <span class="rate-label">Límite:</span>
+        <span class="rate-value" id="rateLimit">—</span>
+      </div>
+      <span class="rate-sep">|</span>
+      <div class="rate-item">
+        <span class="rate-label">Restantes:</span>
+        <span class="rate-value" id="rateRemaining">—</span>
+      </div>
+      <span class="rate-sep">|</span>
+      <div class="rate-item">
+        <span class="rate-label">Reset:</span>
+        <span class="rate-value" id="rateReset">—</span>
+      </div>
+      <span class="rate-sep">|</span>
+      <div class="rate-item">
+        <span class="rate-label">Modo:</span>
+        <span class="rate-value" id="rateMode">—</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="config-panel">
+    <div class="panel-title">// Configuración</div>
+    <div class="fields-grid">
+      <div class="field full">
+        <label>Token GitHub (recomendado)</label>
+        <input type="password" id="tokenInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" oninput="onTokenChange()">
+        <div class="hint">
+          Sin token: 60 req/hora &nbsp;·&nbsp; Con token: 5.000 req/hora &nbsp;·&nbsp;
+          <a href="https://github.com/settings/tokens/new?scopes=public_repo&description=SkillsExplorer" target="_blank">Crear token gratis →</a>
+          (scope: <code>public_repo</code>)
+        </div>
+        <div class="token-status">
+          <div class="ts-dot" id="tokenDot"></div>
+          <span id="tokenStatusText" style="color:var(--muted)">Sin token — modo anónimo (60 req/hora)</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Búsqueda de repositorios</label>
+        <input type="text" id="queryInput" value="claude skills" placeholder="claude skills">
+      </div>
+      <div class="field">
+        <label>Archivo a buscar en repo</label>
+        <input type="text" id="fileQuery" value="SKILL.md" placeholder="SKILL.md">
+      </div>
+      <div class="field">
+        <label>Resultados por página</label>
+        <select id="perPage">
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="30">30</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Ordenar por</label>
+        <select id="sortBy">
+          <option value="stars">⭐ Estrellas</option>
+          <option value="updated">🕐 Actualización</option>
+          <option value="forks">🍴 Forks</option>
+        </select>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="searchRepos()" id="searchBtn">
+        <span class="spinner" id="searchSpinner" style="display:none"></span>
+        <span id="searchBtnText">🔍 Buscar repositorios</span>
+      </button>
+      <button class="btn btn-secondary" onclick="searchSkillFiles()" id="fileBtn">
+        <span class="spinner" id="fileSpinner" style="display:none"></span>
+        <span id="fileBtnText">📄 Buscar archivos SKILL.md</span>
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="checkRateLimit()">📊 Ver rate limit</button>
+    </div>
+  </div>
+
+  <div class="endpoints-box">
+    <div class="ep-toggle" onclick="toggleEndpoints()">
+      <span class="ep-toggle-icon" id="epIcon">▶</span>
+      Endpoints GitHub API v3 utilizados
+    </div>
+    <div class="ep-list" id="epList" style="display:none">
+      <div class="ep-row" onclick="copyEp(this)">
+        <span class="ep-method">GET</span>
+        <div><div class="ep-path">/search/repositories?q=claude+skills&sort=stars</div>
+        <div class="ep-desc">Busca repos · hasta 1.000 resultados paginados</div></div>
+      </div>
+      <div class="ep-row" onclick="copyEp(this)">
+        <span class="ep-method">GET</span>
+        <div><div class="ep-path">/search/code?q=SKILL.md+in:path</div>
+        <div class="ep-desc">Busca archivos en todos los repos públicos · requiere token</div></div>
+      </div>
+      <div class="ep-row" onclick="copyEp(this)">
+        <span class="ep-method">GET</span>
+        <div><div class="ep-path">/repos/{owner}/{repo}/git/trees/HEAD?recursive=1</div>
+        <div class="ep-desc">Árbol completo del repo para encontrar SKILL.md anidados</div></div>
+      </div>
+      <div class="ep-row" onclick="copyEp(this)">
+        <span class="ep-method">GET</span>
+        <div><div class="ep-path">/repos/{owner}/{repo}/contents/{path}</div>
+        <div class="ep-desc">Lee contenido de un archivo (base64 · hasta 1MB)</div></div>
+      </div>
+      <div class="ep-row" onclick="copyEp(this)">
+        <span class="ep-method">GET</span>
+        <div><div class="ep-path">/rate_limit</div>
+        <div class="ep-desc">Estado del rate limit · no consume quota</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="statusBar" style="display:none"></div>
+  <div id="resultsArea"></div>
+
+</div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle">SKILL.md</div>
+        <div class="modal-sub" id="modalSub"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary btn-sm" onclick="copyContent()">📋 Copiar</button>
+        <span class="copy-notice" id="copyNotice">✓ Copiado</span>
+        <button class="close-btn" onclick="closeModal()">×</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="modalSpinner" style="text-align:center;padding:40px"><div class="spinner" style="width:24px;height:24px;margin:auto"></div></div>
+      <pre id="modalContent" style="display:none"></pre>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

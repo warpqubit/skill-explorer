@@ -1,0 +1,15 @@
+{
+  "name": "skill-explorer",
+  "version": "1.0.0",
+  "description": "Explorador de repositorios con Skills de Claude usando GitHub API v3",
+  "bin": {
+    "skill-explorer": "./bin/setup.js"
+  },
+  "scripts": {
+    "start": "node bin/setup.js"
+  },
+  "keywords": ["claude", "skills", "github", "explorer"],
+  "author": "warpqubit",
+  "license": "MIT",
+  "preferGlobal": false
+}
