@@ -14,6 +14,7 @@ const FILES = [
   'launch.bat',
   path.join('css', 'styles.css'),
   path.join('js', 'app.js'),
+  path.join('assets', 'logo.png'),
 ];
 
 function ensureDir(dir) {
