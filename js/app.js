@@ -1,6 +1,16 @@
 const BASE = 'https://api.github.com';
 let currentContent = '';
 
+// Escapa caracteres HTML para prevenir XSS en innerHTML
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function getHeaders() {
   const token = document.getElementById('tokenInput').value.trim();
   const h = { 'Accept': 'application/vnd.github.v3+json' };
@@ -55,7 +65,7 @@ async function checkRateLimit() {
     updateRateMonitor(c.limit, c.remaining, c.reset);
     showStatus(`Core: <strong>${c.remaining}/${c.limit}</strong> &nbsp;·&nbsp; Search: <strong>${s.remaining}/${s.limit}</strong> &nbsp;·&nbsp; Reset: ${new Date(c.reset*1000).toLocaleTimeString('es-AR')}`,
       c.remaining > 100 ? 'ok' : c.remaining > 20 ? 'warn' : 'error');
-  } catch(e) { showStatus('Error: ' + e.message, 'error'); }
+  } catch(e) { showStatus('Error: ' + escHtml(e.message), 'error'); }
 }
 
 function setBtnLoading(id, spinId, textId, loading, label) {
@@ -69,7 +79,7 @@ async function searchRepos() {
   const perPage = document.getElementById('perPage').value;
   const sort = document.getElementById('sortBy').value;
   setBtnLoading('searchBtn','searchSpinner','searchBtnText', true, 'Buscando...');
-  showStatus(`<div class="spinner"></div>&nbsp; Buscando repos con "<strong>${query}</strong>"...`, 'info');
+  showStatus(`<div class="spinner"></div>&nbsp; Buscando repos con "<strong>${escHtml(query)}</strong>"...`, 'info');
   try {
     const url = `${BASE}/search/repositories?q=${encodeURIComponent(query)}&sort=${sort}&per_page=${perPage}`;
     const r = await fetch(url, { headers: getHeaders() });
@@ -79,7 +89,7 @@ async function searchRepos() {
     renderRepos(d.items, d.total_count, query);
     showStatus(`✓ ${d.total_count.toLocaleString()} repositorios encontrados · mostrando ${d.items.length}`, 'ok');
   } catch(e) {
-    showStatus('✗ ' + e.message, 'error');
+    showStatus('✗ ' + escHtml(e.message), 'error');
   } finally {
     setBtnLoading('searchBtn','searchSpinner','searchBtnText', false);
     document.getElementById('searchBtnText').textContent = '🔍 Buscar repositorios';
@@ -89,7 +99,7 @@ async function searchRepos() {
 async function searchSkillFiles() {
   const fileQ = document.getElementById('fileQuery').value.trim() || 'SKILL.md';
   setBtnLoading('fileBtn','fileSpinner','fileBtnText', true, 'Buscando archivos...');
-  showStatus(`<div class="spinner"></div>&nbsp; Buscando <strong>${fileQ}</strong> en repos públicos...`, 'info');
+  showStatus(`<div class="spinner"></div>&nbsp; Buscando <strong>${escHtml(fileQ)}</strong> en repos públicos...`, 'info');
   try {
     const url = `${BASE}/search/code?q=${encodeURIComponent(fileQ)}+in:path&per_page=30`;
     const r = await fetch(url, { headers: getHeaders() });
@@ -100,7 +110,7 @@ async function searchSkillFiles() {
     showStatus(`✓ ${d.total_count.toLocaleString()} archivos encontrados · mostrando ${d.items.length}`, 'ok');
   } catch(e) {
     const extra = (e.message||'').includes('422') ? ' — La búsqueda de código requiere token.' : '';
-    showStatus('✗ ' + e.message + extra, 'error');
+    showStatus('✗ ' + escHtml(e.message) + extra, 'error');
   } finally {
     setBtnLoading('fileBtn','fileSpinner','fileBtnText', false);
     document.getElementById('fileBtnText').textContent = '📄 Buscar archivos SKILL.md';
@@ -110,15 +120,15 @@ async function searchSkillFiles() {
 function renderRepos(repos, total, query) {
   if (!repos.length) { document.getElementById('resultsArea').innerHTML='<div class="empty"><div class="empty-icon">📭</div><h3>Sin resultados</h3></div>'; return; }
   const cards = repos.map(repo => {
-    const langs = repo.language ? `<span class="tag p">${repo.language}</span>` : '';
-    const topics = (repo.topics||[]).slice(0,3).map(t=>`<span class="tag g">${t}</span>`).join('');
+    const langs = repo.language ? `<span class="tag p">${escHtml(repo.language)}</span>` : '';
+    const topics = (repo.topics||[]).slice(0,3).map(t=>`<span class="tag g">${escHtml(t)}</span>`).join('');
     const archived = repo.archived ? `<span class="tag y">archivado</span>` : '';
     const updated = new Date(repo.updated_at).toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'numeric'});
     const safeId = repo.full_name.replace('/','_');
     return `<div class="repo-card">
-      <div class="repo-name">${repo.name}</div>
-      <div class="repo-full">${repo.full_name}</div>
-      ${repo.description?`<div class="repo-desc">${repo.description}</div>`:''}
+      <div class="repo-name">${escHtml(repo.name)}</div>
+      <div class="repo-full">${escHtml(repo.full_name)}</div>
+      ${repo.description?`<div class="repo-desc">${escHtml(repo.description)}</div>`:''}
       <div class="repo-stats">
         <span class="stat">⭐ ${repo.stargazers_count.toLocaleString()}</span>
         <span class="stat">🍴 ${repo.forks_count.toLocaleString()}</span>
@@ -126,16 +136,19 @@ function renderRepos(repos, total, query) {
       </div>
       <div class="repo-tags">${langs}${topics}${archived}</div>
       <div class="repo-actions">
-        <button class="btn btn-secondary btn-sm" onclick="scanRepo('${repo.full_name}','${safeId}')">🔎 Buscar SKILL.md</button>
-        <a href="${repo.html_url}" target="_blank" style="text-decoration:none"><button class="btn btn-secondary btn-sm">↗ Ver repo</button></a>
+        <button class="btn btn-secondary btn-sm"
+          data-repo="${escHtml(repo.full_name)}" data-id="${escHtml(safeId)}"
+          onclick="scanRepo(this.dataset.repo, this.dataset.id)">🔎 Buscar SKILL.md</button>
+        <a href="${escHtml(repo.html_url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">
+          <button class="btn btn-secondary btn-sm">↗ Ver repo</button></a>
       </div>
-      <div class="scan-area" id="scan-${safeId}"></div>
+      <div class="scan-area" id="scan-${escHtml(safeId)}"></div>
     </div>`;
   }).join('');
   document.getElementById('resultsArea').innerHTML = `
     <div class="results-header">
       <div class="results-title">Repositorios</div>
-      <div class="count-badge">${total.toLocaleString()} resultados · "${query}"</div>
+      <div class="count-badge">${total.toLocaleString()} resultados · "${escHtml(query)}"</div>
     </div>
     <div class="repo-grid">${cards}</div>`;
 }
@@ -149,13 +162,16 @@ function renderSkillFiles(items, total) {
     byRepo[k].files.push(item);
   });
   const cards = Object.values(byRepo).map(({repo, files}) => {
-    const rows = files.map(f=>`<div class="skill-file-item" onclick="openSkillFile('${repo.full_name}','${f.path}')">
-      <span>📄</span><span class="sfi-path">${f.path}</span></div>`).join('');
+    const rows = files.map(f=>`<div class="skill-file-item"
+        data-repo="${escHtml(repo.full_name)}" data-path="${escHtml(f.path)}"
+        onclick="openSkillFile(this.dataset.repo, this.dataset.path)">
+      <span>📄</span><span class="sfi-path">${escHtml(f.path)}</span></div>`).join('');
     return `<div class="repo-card">
-      <div class="repo-name">${repo.name}</div>
-      <div class="repo-full">${repo.full_name}</div>
+      <div class="repo-name">${escHtml(repo.name)}</div>
+      <div class="repo-full">${escHtml(repo.full_name)}</div>
       <div style="margin-bottom:10px">${rows}</div>
-      <a href="${repo.html_url}" target="_blank" style="text-decoration:none"><button class="btn btn-secondary btn-sm">↗ Ver repo</button></a>
+      <a href="${escHtml(repo.html_url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">
+        <button class="btn btn-secondary btn-sm">↗ Ver repo</button></a>
     </div>`;
   }).join('');
   document.getElementById('resultsArea').innerHTML = `
@@ -176,11 +192,13 @@ async function scanRepo(fullName, safeId) {
     if (!r.ok) throw new Error(d.message);
     const fileQ = (document.getElementById('fileQuery').value.trim() || 'SKILL.md').toLowerCase();
     const found = (d.tree||[]).filter(f => f.path.toLowerCase().includes(fileQ) && f.type==='blob');
-    if (!found.length) { el.innerHTML=`<div style="font-size:11px;color:var(--muted)">✗ No se encontró ${fileQ.toUpperCase()} en este repo</div>`; return; }
-    const rows = found.map(f=>`<div class="skill-file-item" onclick="openSkillFile('${fullName}','${f.path}')">
-      <span>📄</span><span class="sfi-path">${f.path}</span></div>`).join('');
+    if (!found.length) { el.innerHTML=`<div style="font-size:11px;color:var(--muted)">✗ No se encontró ${escHtml(fileQ.toUpperCase())} en este repo</div>`; return; }
+    const rows = found.map(f=>`<div class="skill-file-item"
+        data-repo="${escHtml(fullName)}" data-path="${escHtml(f.path)}"
+        onclick="openSkillFile(this.dataset.repo, this.dataset.path)">
+      <span>📄</span><span class="sfi-path">${escHtml(f.path)}</span></div>`).join('');
     el.innerHTML = `<div style="font-size:11px;color:var(--accent2);margin-bottom:6px">✓ ${found.length} archivo(s) encontrado(s)</div>${rows}`;
-  } catch(e) { el.innerHTML=`<div style="font-size:11px;color:var(--danger)">✗ ${e.message}</div>`; }
+  } catch(e) { el.innerHTML=`<div style="font-size:11px;color:var(--danger)">✗ ${escHtml(e.message)}</div>`; }
 }
 
 async function openSkillFile(fullName, path) {
